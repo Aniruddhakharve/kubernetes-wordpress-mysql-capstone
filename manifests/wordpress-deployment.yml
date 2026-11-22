@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+  namespace: capstone
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1 
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      initContainers:
+        - name: wait-for-mysql
+          image: mysql:8.0
+          env:
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_USER
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_PASSWORD
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_DATABASE
+          command:
+            - sh
+            - -c
+            - |
+              until MYSQL_PWD="$MYSQL_PASSWORD" mysql \
+                -h mysql-0.mysql.capstone.svc.cluster.local \
+                -u "$MYSQL_USER" \
+                -D "$MYSQL_DATABASE" \
+                -e "SELECT 1" >/dev/null 2>&1; do
+                echo "Waiting for MySQL to become ready..."
+                sleep 5
+              done
+              echo "MySQL is ready and accepting authenticated queries!"
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+      containers:
+        - name: wordpress
+          image: wordpress:latest
+          ports:
+            - containerPort: 80
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: wordpress-config
+          env:
+            - name: WORDPRESS_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_USER
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_PASSWORD
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          startupProbe:
+            httpGet:
+              path: /wp-login.php
+              port: 80
+              scheme: HTTP
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /wp-login.php
+              port: 80
+              scheme: HTTP
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /wp-login.php
+              port: 80
+              scheme: HTTP
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: wordpress-uploads
+              mountPath: /var/www/html/wp-content/uploads
+      volumes:
+        - name: wordpress-uploads
+          persistentVolumeClaim:
+            claimName: wordpress-nfs-pvc
+  

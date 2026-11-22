@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: wordpress-nfs-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-manual
+  mountOptions:
+    - proto=tcp
+    - nfsvers=4.1
+  nfs:
+    server: 172.19.0.10
+    path: /wordpress-uploads

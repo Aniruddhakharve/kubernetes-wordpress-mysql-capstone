@@ -1,0 +1,6 @@
+# Kubernetes secrets
+manifests/mysql-secret.yml
+
+# NFS runtime data and logs
+nfs-server/data/
+nfs-server/logs/
